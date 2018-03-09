@@ -19,3 +19,7 @@ version := "1.0"
 // This program is written in Java, hence to force sbt to compile java code
 autoScalaLibrary := false
 
+// Do not append Scala versions to the generated artifacts
+crossPaths := false
+
+
