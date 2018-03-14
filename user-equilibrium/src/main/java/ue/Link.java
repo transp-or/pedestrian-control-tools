@@ -12,7 +12,10 @@ public class Link extends DefaultWeightedEdge {
 	private double alpha; //parameter1
 	private double power; //parameter2
 	private double cost;
-	
+	private double topSpeed;
+	private int cat; //1 = walking, 2 = cmw, 3 = amw
+
+
 	public long getLinkID() {
 		return linkID;
 	}
@@ -78,4 +81,20 @@ public class Link extends DefaultWeightedEdge {
 	    if (cost < 0.0) {throw new IllegalArgumentException("Cost < than 0 for link " + this.linkID);}
 	    this.cost = cost;
 	}
+
+	public double getTopSpeed() {
+		return topSpeed;
+	}
+	public void setTopSpeed(double topSpeed) {
+		this.topSpeed = topSpeed;
+	}
+
+	public double getCat() {
+		return cat;
+	}
+	public void setCat(int cat) {
+		this.cat = cat;
+	}
+
+
 }

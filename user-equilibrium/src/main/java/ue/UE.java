@@ -1,10 +1,8 @@
 package ue;
 
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
+import com.sun.tools.javac.util.Pair;
 import org.jgrapht.alg.shortestpath.DijkstraShortestPath;
 import org.jgrapht.graph.DefaultDirectedWeightedGraph;
 
@@ -31,7 +29,7 @@ public class UE {
     // List of link IDs
     private List<Long> linkIDList;
 
-    // Map storingt he links
+    // Map storing the links
     private Map<Long, Link> linkMap;
 
     // List of OD Ids
@@ -39,6 +37,9 @@ public class UE {
 
     // Map storing the OD data
     private Map<Long, OD> odMap;
+
+    // Map storing the walking detours required by the AMWs
+    //private Map<Node,Node> detourNodeMap;
 
     // Solution of the UE problem in terms of flows
     private double[] flowSolution;
@@ -102,6 +103,7 @@ public class UE {
      */
     public void setVerbose(Boolean v) { this.verbose = v; }
 
+
     // Graph object for finding the shortest path
     private DefaultDirectedWeightedGraph<Node, Link> graph;
 
@@ -140,6 +142,7 @@ public class UE {
         this.odIDList = new ArrayList<>();
         this.odIDList.addAll(odMapInput.keySet());
         this.odMap = odMapInput;
+        //this.detourNodeMap = ueDetourNodeMap;
 
         // Computes the sizes of the input data
         this.N = nodeIDList.size();
@@ -180,7 +183,23 @@ public class UE {
         for (int a = 0; a < L; a++) {
             long linkID = linkIDList.get(a);
             Link link = linkMap.get(linkID);
+
             double cost = link.getFree() * (1 + link.getAlpha() * Math.pow(currentFlow[a] / link.getCapacity(), link.getPower()));
+
+
+            if (link.getCat() == 2){ //CMW
+                double ttvw = (link.getLength() / 1.34) * (1 + link.getAlpha() * Math.pow(currentFlow[a] / link.getCapacity(), link.getPower()));
+                cost = (link.getLength() / (0.65 + link.getLength()/ttvw)) ;
+            }
+            else if (link.getCat() == 3){ //AMW
+                double ttvw = (link.getLength() / 1.34) * (1 + link.getAlpha() * Math.pow(currentFlow[a] / link.getCapacity(), link.getPower()));
+                double v_w = link.getLength()/ttvw;
+                double t_e = (link.getTopSpeed() - 0.7) / 0.43;
+                double x_a = (Math.pow(link.getTopSpeed(), 2) - Math.pow(0.7, 2)) / (2 * 0.43);
+
+                cost = ((link.getLength() - (2 * x_a)) / (link.getTopSpeed() + v_w)) + (2 * t_e) ;
+            }
+
             //System.out.println(link.getLinkID() + ", " +  cost);
             link.setCost(cost);
             this.graph.setEdgeWeight(link, cost);
@@ -193,8 +212,10 @@ public class UE {
      *
      * @return flows on each link
      */
-    private double[] assignFlows() {
+    private Pair<double[], List<List<Long>>> assignFlows() {
         double[] flowSolution = new double[L];
+        List<List<Long>> ODPaths = new ArrayList<>();
+
         for (int m = 0; m < M; m++) {
             long odID = odIDList.get(m);
             OD od = odMap.get(odID);
@@ -204,12 +225,23 @@ public class UE {
             //finding shortest path by dijkstra algorithm
             //List<Long> path = Dijkstra.getPath(nodeIDList, nodeMap, linkIDList, linkMap, origin, destination);
             List<Long> path = getShortestPath(this.nodeMap.get(origin), this.nodeMap.get(destination));
+
+            ODPaths.add(path);
+//
+//            if (od.getFlow()>0.0 && m ==2) {
+//                System.out.println("Origin: " + od.getOrigin() + "; Destination: " + od.getDestination() + "; Flow: " + od.getFlow() + "; Path: " + path);
+//            }
+
             //add flow to every link in the shortest path
             for (Long l: path) {
                 flowSolution[linkIDList.indexOf(l)] += flow;
             }// for l
         }// for m
-        return flowSolution;
+
+        //Pair<double[], List<List<Long>>> out = new Pair<>(flowSolution, ODPaths);
+
+        //return flowSolution;
+        return new Pair<>(flowSolution, ODPaths);
     }
 
     /** Performs the first assignment based on zero flows.
@@ -228,7 +260,7 @@ public class UE {
         updateTravelTimes(initialFlows);
 
         // initial flows
-        double[] initialSolution = assignFlows();
+        double[] initialSolution = assignFlows().fst;
 
         if (verbose) System.out.println(" done !");
 
@@ -242,21 +274,24 @@ public class UE {
      */
     private void computeSolution() {
     // TODO: add solver parameters as argument
-        int maxIterations = 10000;
+        int maxIterations = 10000; //TODO CJ RESTORE 10000
         double diff_max = 10000;
-        double criteriaIndividual = 0.0001;
-        double criteriaTotal = 0.001;
+
+        double criteriaIndividual = 0.001; //TODO CJ RESTORE 0.001
+        double criteriaTotal = 0.01; //TODO CJ RESTORE 0.01
 
 
 
-        if (verbose) {
-            System.out.println("Parameters for solver are:");
-            System.out.println("  - relative individual increment = " + criteriaIndividual);
-            System.out.println("  - relative total increment = " + criteriaTotal);
-            System.out.println("  - max iterations = " + maxIterations);
-            System.out.print("Started solver iterations...");
+//TODO CJ RESTORE WHEN DONE EXTRACTING OD PATHS
 
-        }
+//        if (verbose) {
+//            System.out.println("Parameters for solver are:");
+//            System.out.println("  - relative individual increment = " + criteriaIndividual);
+//            System.out.println("  - relative total increment = " + criteriaTotal);
+//            System.out.println("  - max iterations = " + maxIterations);
+//            System.out.print("Started solver iterations...");
+//
+//        }
 
         // iteration counter
         int iteration = 0;
@@ -274,7 +309,9 @@ public class UE {
             updateTravelTimes(flowSolution);
 
             // assign flows based on updated travel times
-            double[] y = assignFlows();
+            Pair<double[], List<List<Long>>> fullFlows = assignFlows();
+            double[] y = fullFlows.fst;//assignFlows();
+            List<List<Long>> ODPaths = fullFlows.snd;
 
             // Unidimensional search by Golden Section method
             double[] newSolution = GoldenSection.getNewFlow(flowSolution, y, linkIDList, linkMap, nodeIDList);
@@ -301,13 +338,36 @@ public class UE {
 
             //update solution
             flowSolution = newSolution;
+
+
+            /*// Print OD paths
+            if (!((!(diff_max < criteriaIndividual) || !(total_diff < criteriaTotal)) && iteration <= maxIterations)){
+
+
+
+                System.out.println("Origin; Destination; Path");
+
+                for (int m = 0; m < M; m++) {
+                    long odID = odIDList.get(m);
+                    OD od = odMap.get(odID);
+                    long origin = od.getOrigin();
+                    long destination = od.getDestination();
+                    List path = ODPaths.get(m);
+                    System.out.format("\n" + origin + ";" + destination + ";" + path);
+                }
+            }*/
+
         }// while
 
-        if (verbose) {
-            System.out.print(" done ! \nFinished iterating");
-            System.out.println("  - number of iterations: " + String.valueOf(iteration));
-            System.out.println("  - final total improvement: " + String.valueOf(total_diff));
-        }
+
+
+
+//TODO CJ RESTORE WHEN DONE EXTRACTING OD PATHS
+//        if (verbose) {
+//            System.out.print(" done ! \nFinished iterating");
+//            System.out.println("  - number of iterations: " + String.valueOf(iteration));
+//            System.out.println("  - final total improvement: " + String.valueOf(total_diff));
+//        }
     }
 
     /** Actually does the work. Call this method to solve the problem.
@@ -326,7 +386,24 @@ public class UE {
         for (int a = 0; a < L; a++) {
             long linkID = linkIDList.get(a);
             Link link = linkMap.get(linkID);
+
             travelTime[a] = link.getFree() * (1 + link.getAlpha() * Math.pow(flowSolution[a] / link.getCapacity(), link.getPower()));
+
+            if (link.getCat() == 2){ //CMW
+                double ttvw = (link.getLength() / 1.34) * (1 + link.getAlpha() * Math.pow(flowSolution[a] / link.getCapacity(), link.getPower()));
+                travelTime[a] = (link.getLength() / (0.65 + link.getLength()/ttvw)) ;
+            }
+            else if (link.getCat() == 3){ //AMW
+                double ttvw = (link.getLength() / 1.34) * (1 + link.getAlpha() * Math.pow(flowSolution[a] / link.getCapacity(), link.getPower()));
+                double v_w = link.getLength()/ttvw;
+                double t_e = (link.getTopSpeed() - 0.7) / 0.43;
+                double x_a = (Math.pow(link.getTopSpeed(), 2) - Math.pow(0.7, 2)) / (2 * 0.43);
+
+                travelTime[a] = ((link.getLength() - (2 * x_a)) / (link.getTopSpeed() + v_w)) + (2 * t_e) ;
+            }
+
+
+            //travelTime[a] = link.getFree() * (1 + link.getAlpha() * Math.pow(flowSolution[a] / link.getCapacity(), link.getPower())); //TODO CJ 26 JAN 2018 WRONGLY PLACED -> SHOULD BE BEFORE CMW AND AMW
         }
     }
 }

@@ -16,7 +16,6 @@ import java.util.List;
 import java.util.Map;
 
 public class Main {
-    // mod for charles
 	public static void main(String[] args) {
 		// TODO Network reduction
 
