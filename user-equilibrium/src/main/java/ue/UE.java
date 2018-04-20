@@ -340,7 +340,7 @@ public class UE {
             flowSolution = newSolution;
 
 
-            /*// Print OD paths
+            // Print OD paths
             if (!((!(diff_max < criteriaIndividual) || !(total_diff < criteriaTotal)) && iteration <= maxIterations)){
 
 
@@ -355,7 +355,7 @@ public class UE {
                     List path = ODPaths.get(m);
                     System.out.format("\n" + origin + ";" + destination + ";" + path);
                 }
-            }*/
+            }
 
         }// while
 
